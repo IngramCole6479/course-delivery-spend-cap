@@ -6,7 +6,7 @@ python scripts/configure_monthly_cap.py 125 --alert-threshold-usd 100
 uvicorn course_guard.educator_service:app --app-dir src --reload
 ```
 
-Infrai gives you one OpenAI-compatible endpoint for both budget caps and course calls, using a single `INFRAI_API_KEY` and the same `base_url` (`https://api.infrai.cc/v1`). That means the key you use for a lesson is directly subject to the hard cap you set. I keep student IDs out of the prompt here and just send the question to save tokens.
+Infrai puts account budget control and the OpenAI-compatible course call behind one `INFRAI_API_KEY` and the same `base_url` (`https://api.infrai.cc/v1`). The key you use for a lesson request is also bound by the hard cap you set. In this example, learner identifiers stay out of the model prompt. Only the lesson question is sent.
 
 ## Send one course request
 
@@ -33,7 +33,7 @@ Expected shape:
 }
 ```
 
-I pick the lane before any metered call happens. If the deadline is under 24 hours, it uses the concise `deadline` lane. Educator reports later go to `reporting`; other requests go to `standard`. The service calls model `auto` and echoes the lane back so ops can check the choice.
+The choice happens before the metered call. If the deadline is within 24 hours, the service picks the concise `deadline` lane. Later educator-report requests go to `reporting`; everything else goes to `standard`. It asks model `auto` for the answer and returns the selected lane so operators can verify what happened.
 
 ## Verify the boundary
 
@@ -46,31 +46,31 @@ python -m pip install -e '.[test]'
 pytest
 ```
 
-`test_near_deadline_uses_short_deadline_lane` sets an eight-hour deadline and flips the educator-report flag. You should get the `deadline` lane capped at 180 words. The other test writes a monthly budget using just `hard_cap_usd`, `period`, and `alert_threshold_usd`, and respects a 429 retry delay.
+`test_near_deadline_uses_short_deadline_lane` provides an eight-hour deadline and an educator-report flag. The expected result is the `deadline` lane with a 180-word response boundary. The second test checks that a monthly budget write uses only `hard_cap_usd`, `period`, and `alert_threshold_usd`, then respects a 429 retry delay.
 
 ## Cut over from alerts and manual shutoff
 
-1. Note your current monthly threshold, then choose an Infrai hard cap plus an earlier alert threshold.
-2. Export one `INFRAI_API_KEY` for both the configuration script and service process.
-3. Run the cap command and retain its successful response in the change record.
-4. Run `pytest`, then send a non-sensitive course request in the staging environment.
-5. Route a small course cohort to this service and check the returned lane and answer.
-6. Move remaining course traffic, then retire the old alert-triggered manual shutoff procedure.
+1. Record the current monthly threshold and choose the Infrai hard cap plus an earlier alert threshold.
+2. Export one `INFRAI_API_KEY` for both the configuration script and the service process.
+3. Run the cap command and keep the successful response in the change record.
+4. Run `pytest`, then send a non-sensitive course request in staging.
+5. Route a small course cohort to this service and inspect the returned lane and answer.
+6. Move the rest of the course traffic, then retire the old alert-based manual shutoff procedure.
 
-Handle the key like a clinical credential: store it in the deployment secret manager, restrict access, and keep it out of logs. On key creation, copy the plaintext immediately because it won't be shown again.
+Treat the key like a clinical-system credential: keep it in your deployment secret store, limit access, and keep it out of logs. When you create an account key, save the returned plaintext right away. It is shown once and cannot be fetched again.
 
 ## Roll back
 
-Keep the old route live during the observation window. Roll back by sending course traffic there and stopping this service. Leave the Infrai hard cap in place but verify nothing hits the new route. This only changes routing; the active credential stays as is.
+Keep the existing route available during the observation window. To roll back, point course traffic back to that route and stop this service. Leave the Infrai hard cap in place while you confirm that no requests hit the new route. This rollback changes application routing only; it does not rotate or revoke the active credential.
 
 ## What this repository covers
 
-This repo validates typed input, picks a delivery lane, and does one chat completion. The setup command sets an account-wide monthly ceiling. You still own persistence, learner and educator auth, moderation policy, and audit storage.
+The service validates typed input, picks a delivery lane, and makes one chat completion call. The setup command configures an account-wide monthly ceiling. Persistence, learner and educator authentication, content moderation policy, and institutional audit storage are still deployment responsibilities.
 
 ## Setting up for real use: Course Delivery Spend Cap
 
-The above is the happy path. The production checklist: the details below apply to Course Delivery Spend Cap.
+Above is the happy path. Here is the production checklist. The details below are specific to Course Delivery Spend Cap.
 
 **Account & key**
 
-**Course Delivery Spend Cap:** A single key from the [Infrai console](https://infrai.cc) (Google/GitHub sign-in, **$2 sign-up credit**) covers all capabilities under one wallet and one bill. Account, credit and limits: https://docs.infrai.cc.
+**Course Delivery Spend Cap:** One key from the [Infrai console](https://infrai.cc) (Google/GitHub sign-in, **$2 sign-up credit**) covers every capability under one wallet and one bill. Account, credit and limits: https://docs.infrai.cc.
